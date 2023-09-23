@@ -43,8 +43,11 @@ public class SampleTaskletJob {
                 .tasklet((contribution, chunkContext) -> {
                     System.out.println("Dsadas");
                     for (Item item : allItems) {
-                        log.info("tasklet.startStep item : {}", item.getItemName());
+//                        log.info("tasklet.startStep item : {}", item.getItemName());
+                        item.setItemPrice(item.getItemPrice() + 50000);
                     }
+
+                    itemRepository.saveAll(allItems);
 
                     return RepeatStatus.FINISHED;
                 })
