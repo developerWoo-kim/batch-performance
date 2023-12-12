@@ -3,7 +3,11 @@ package gwkim.batchperformance.batch;
 import gwkim.batchperformance.cms.item.domain.Item;
 import gwkim.batchperformance.cms.item.domain.QItem;
 import gwkim.batchperformance.cms.item.repository.ItemRepository;
+import gwkim.batchperformance.common.querydsl.reader.QuerydslNoOffsetPagingItemReader;
 import gwkim.batchperformance.common.querydsl.reader.QuerydslPagingItemReader;
+import gwkim.batchperformance.common.querydsl.reader.expression.Expression;
+import gwkim.batchperformance.common.querydsl.reader.options.QuerydslNoOffsetNumberOptions;
+import gwkim.batchperformance.common.querydsl.reader.options.QuerydslNoOffsetOptions;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.Job;
@@ -30,10 +34,9 @@ import static gwkim.batchperformance.cms.item.domain.QItem.item;
 @ConditionalOnProperty(name = "spring.batch.job.names", havingValue = "sampleChunkJob")
 @RequiredArgsConstructor
 public class SampleChunkJob {
-    private final JobBuilderFactory jobBuilderFactory;
-    private final StepBuilderFactory stepBuilderFactory;
-    private final TaskExecutor taskExecutor;
-    private final EntityManagerFactory entityManagerFactory;
+    private final JobBuilderFactory jbf;
+    private final StepBuilderFactory sbf;
+    private final EntityManagerFactory emf;
 
 
     private int chunkSize;
@@ -50,30 +53,62 @@ public class SampleChunkJob {
 
     @Bean
     public Job chunkJob() throws Exception {
-        return jobBuilderFactory.get("sampleChunkJob")
-                .start(chunkStep(null))
+        return jbf.get("sampleChunkJob")
+                .start(offsetStep(null))
                 .build();
     }
     @Bean
     @JobScope
-    public Step chunkStep(@Value("#{jobParameters[requestDate]}") String requestDate) {
-        return stepBuilderFactory.get("chunkStep")
-                .<Item, Item> chunk(chunkSize) // Chuck 사이즈는 한번에 처리될 트랜잭선 단위
-                .reader(sampleChunkReader(null))
+    public Step noOffsetStep(@Value("#{jobParameters[requestDate]}") String requestDate) {
+        return sbf.get("noOffsetStep")
+                .<Item, Item> chunk(chunkSize)
+                .reader(noOffsetPagingItemReader(null))
                 .processor(sampleChunkProcessor(null))
                 .writer(sampleChunkWriter(null))
-//                .taskExecutor(taskExecutor)
                 .build();
     }
 
     @Bean
     @StepScope
-    public QuerydslPagingItemReader<Item> sampleChunkReader(@Value("#{jobParameters[requestDate]}") String requestDate) {
-        return new QuerydslPagingItemReader<>(entityManagerFactory, pageSize,
-                jpaQueryFactory -> jpaQueryFactory
-                        .selectFrom(item)
+    public QuerydslNoOffsetPagingItemReader<Item> noOffsetPagingItemReader(@Value("#{jobParameters[requestDate]}") String requestDate) {
+        QuerydslNoOffsetNumberOptions<Item, Long> options =
+                new QuerydslNoOffsetNumberOptions<>(item.id, Expression.ASC);
+        return new QuerydslNoOffsetPagingItemReader<>(emf, chunkSize, options, queryFactory -> queryFactory
+                .selectFrom(item)
         );
     };
+
+    @Bean
+    @JobScope
+    public Step offsetStep(@Value("#{jobParameters[requestDate]}") String requestDate) {
+        return sbf.get("offsetStep")
+                .<Item, Item> chunk(chunkSize)
+                .reader(offsetPagingItemReader(null))
+                .processor(sampleChunkProcessor(null))
+                .writer(sampleChunkWriter(null))
+                .build();
+    }
+
+    @Bean
+    @JobScope
+    public Step chunkStep3(@Value("#{jobParameters[requestDate]}") String requestDate) {
+        return sbf.get("chunkStep")
+                .<Item, Item> chunk(chunkSize)
+                .reader(offsetPagingItemReader(null))
+                .processor(sampleChunkProcessor(null))
+                .writer(sampleChunkWriter(null))
+                .build();
+    }
+
+    @Bean
+    @StepScope
+    public QuerydslPagingItemReader<Item> offsetPagingItemReader(@Value("#{jobParameters[requestDate]}") String requestDate) {
+        return new QuerydslPagingItemReader<>(emf, chunkSize, queryFactory -> queryFactory
+                .selectFrom(item)
+        );
+    };
+
+
 
     public ItemProcessor<Item, Item> sampleChunkProcessor(@Value("#{jobParameters[requestDate]}") String requestDate) {
         return item -> {
@@ -86,7 +121,7 @@ public class SampleChunkJob {
     @StepScope
     public ItemWriter<Item> sampleChunkWriter(@Value("#{jobParameters[requestDate]}") String requestDate) {
         return new JpaItemWriterBuilder<Item>()
-                .entityManagerFactory(entityManagerFactory)
+                .entityManagerFactory(emf)
                 .build();
     };
 }

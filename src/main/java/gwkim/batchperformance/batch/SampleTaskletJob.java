@@ -4,6 +4,7 @@ import gwkim.batchperformance.cms.item.domain.Item;
 import gwkim.batchperformance.cms.item.repository.ItemRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.batch.core.ExitStatus;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
@@ -41,6 +42,8 @@ public class SampleTaskletJob {
         List<Item> allItems = itemRepository.findAll();
         return stepBuilderFactory.get("startStep")
                 .tasklet((contribution, chunkContext) -> {
+
+                    contribution.setExitStatus(ExitStatus.COMPLETED);
                     System.out.println("Dsadas");
                     for (Item item : allItems) {
 //                        log.info("tasklet.startStep item : {}", item.getItemName());
